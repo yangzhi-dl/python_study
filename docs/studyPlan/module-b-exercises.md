@@ -340,11 +340,11 @@ if __name__ == "__main__":
 
 ### 验收标准
 
-- [ ] `python main.py` 一次跑通，无报错
-- [ ] 从**任意目录**运行都能读到 `prompts/system.txt`
-- [ ] 命令行前面有 `(.venv)`
-- [ ] `requirements.txt` 存在且内容正确
-- [ ] 删掉 `.env` 后重跑，程序**不崩溃**（因为 `os.getenv` 给了默认值）
+- [x] `python main.py` 一次跑通，无报错
+- [x] 从**任意目录**运行都能读到 `prompts/system.txt`
+- [x] 命令行前面有 `(.venv)`
+- [x] `requirements.txt` 存在且内容正确
+- [x] 删掉 `.env` 后重跑，程序**不崩溃**（因为 `os.getenv` 给了默认值）
 
 ---
 
@@ -386,3 +386,4 @@ pip install -r requirements.txt   # 按清单装依赖
 python 脚本.py                     # 跑脚本
 deactivate                        # 退出虚拟环境
 ```
+
