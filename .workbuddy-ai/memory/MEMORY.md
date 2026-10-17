@@ -57,8 +57,9 @@
 |---|---|---|
 | A 语言基础 | **已完成**（2026-10-14） | 自建 13 个基础训练 + 完成 9 道综合题 |
 | B 工程环境 | **基本完成**（2026-10-15） | 已实操 venv / dotenv / config.py / 跨文件 import |
-| C 面向对象 | 已出练习（2026-10-15），进行中 | `docs/studyPlan/module-c-exercises.md` |
-| D–H | 未开始 | |
+| C 面向对象 | **已完成**（2026-10-16） | 9 道题全做 |
+| D 类型系统与 Pydantic | 已出练习（2026-10-16），进行中 | `docs/studyPlan/module-d-exercises.md` |
+| E–H | 未开始 | |
 
 **下一步**：Ember 做完模块 B 后出模块 C（面向对象）。学完 A–D 后进入 LangChain 核心概念，再到 LangGraph（那阶段标准为「看懂即可」）。
 
@@ -80,7 +81,8 @@ Python学习/
 │       ├── README.md                  # Python 基础清单（定稿）
 │       ├── module-a-exercises.md      # 模块 A 练习
 │       ├── module-b-exercises.md      # 模块 B 练习
-│       └── module-c-exercises.md      # 模块 C 练习
+│       ├── module-c-exercises.md      # 模块 C 练习
+│       └── module-d-exercises.md      # 模块 D 练习
 ├── practice/               # 练习代码，按模块分
 │   ├── README.md
 │   ├── module_a_language_basics/      # Ember 已建 基础训练/ + 模块联系题/
