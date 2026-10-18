@@ -58,8 +58,11 @@
 | A 语言基础 | **已完成**（2026-10-14） | 自建 13 个基础训练 + 完成 9 道综合题 |
 | B 工程环境 | **基本完成**（2026-10-15） | 已实操 venv / dotenv / config.py / 跨文件 import |
 | C 面向对象 | **已完成**（2026-10-16） | 9 道题全做 |
-| D 类型系统与 Pydantic | 已出练习（2026-10-16），进行中 | `docs/studyPlan/module-d-exercises.md` |
-| E–H | 未开始 | |
+| D 类型系统与 Pydantic | **已完成**（2026-10-17） | 10 道题全做 |
+| E 错误处理与调试 | 已出练习（2026-10-17） | `docs/studyPlan/module-e-exercises.md` |
+| F 异步与流式 | 已出练习（2026-10-17） | `docs/studyPlan/module-f-exercises.md` |
+| G 装饰器 | 已出练习（2026-10-17） | `docs/studyPlan/module-g-exercises.md` |
+| H 工程化配套 | 已出练习（2026-10-17，按需） | `docs/studyPlan/module-h-exercises.md` |
 
 **下一步**：Ember 做完模块 B 后出模块 C（面向对象）。学完 A–D 后进入 LangChain 核心概念，再到 LangGraph（那阶段标准为「看懂即可」）。
 
@@ -82,7 +85,11 @@ Python学习/
 │       ├── module-a-exercises.md      # 模块 A 练习
 │       ├── module-b-exercises.md      # 模块 B 练习
 │       ├── module-c-exercises.md      # 模块 C 练习
-│       └── module-d-exercises.md      # 模块 D 练习
+│       ├── module-d-exercises.md      # 模块 D 练习
+│       ├── module-e-exercises.md      # 模块 E 练习
+│       ├── module-f-exercises.md      # 模块 F 练习
+│       ├── module-g-exercises.md      # 模块 G 练习
+│       └── module-h-exercises.md      # 模块 H 练习（按需）
 ├── practice/               # 练习代码，按模块分
 │   ├── README.md
 │   ├── module_a_language_basics/      # Ember 已建 基础训练/ + 模块联系题/
@@ -143,3 +150,56 @@ GitHub 已不支持密码认证，需用 **PAT（Personal Access Token）**，�
 - `init.defaultBranch main` —— 新建仓库默认 main 分支
 - `push.autoSetupRemote true` —— 首次推送不用加 `-u`
 - `pull.rebase false` —— 消除 pull 警告
+
+---
+
+## 九、常见问题排查（经验）
+
+### 「编辑器标红但代码能运行」= PyCharm 索引/缓存问题
+
+→ `File → Invalidate Caches... → 勾选前两项 → Invalidate and Restart`
+
+**原理**：运行时 `python.exe` 自己按 `pyvenv.cfg` 找 `site-packages`，**不看 IDE 配置**；标红是 PyCharm 拿自己缓存的 `classPath` 做静态分析。两者可脱节。
+
+**已发生实例**：PyCharm 添加解释器时扫描不完整，`jdk.table.xml` 里该解释器的 `classPath` 漏掉 `.venv/Lib/site-packages`，重启无效，清缓存才修好。
+
+### `ModuleNotFoundError` 排查第一步
+
+先确认用的是哪个 Python，而不是重装包：
+
+```bash
+python -c "import sys; print(sys.executable)"
+```
+
+路径不对 → 问题在解释器选择，不在包。
+
+### 切换 venv 的三种方式
+
+| 方式 | 适用 | 操作 |
+|---|---|---|
+| 项目解释器 | 整个项目 | Settings → Python Interpreter |
+| 运行配置 | 单个脚本 | Run → Edit Configurations |
+| 终端激活 | 临时一次 | `source .venv/Scripts/activate` |
+
+---
+
+## 十、下一阶段：LangChain / LangGraph（2026-10-17 规划）
+
+路线文档：`docs/studyPlan/langchain-langgraph-roadmap.md`
+
+**标准变化**：Python 基础是「会写」，框架层是「**看懂 + 能改 + 能设计**」。
+
+**三层结构（对应能力栈 ②③④）**：
+
+| 层 | 内容 | 时间 |
+|---|---|---|
+| ② | LangChain 6 概念 + LangGraph 7 概念 | 2–3 周 |
+| ③ | Agent 范式（ReAct / 工具调用 / 状态管理） | 1–2 周 |
+| ④ | 工程化（RAG / 审计 / 部署 / 安全） | 边做边补 |
+
+**贯穿项目**：不良品根因追溯智能体，分三阶段（单轮 → 多轮追溯 → 产品化）。
+
+**核心提醒**：
+- 第 ③ 层是**思想**不是 API，必须理解
+- 「什么时候不该用 Agent」比「怎么用 Agent」更重要
+- 最大风险是**过度设计** —— 先跑通一条链路，再谈扩展
