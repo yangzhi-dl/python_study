@@ -6,7 +6,7 @@
 @Date    : 2026/10/21 21:47
 @Desc    : 
 """
-import config
+from quickstart import config
 from langchain.agents import create_agent
 
 def get_weather(city: str) -> str:
