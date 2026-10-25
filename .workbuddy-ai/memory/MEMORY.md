@@ -203,3 +203,31 @@ python -c "import sys; print(sys.executable)"
 - 第 ③ 层是**思想**不是 API，必须理解
 - 「什么时候不该用 Agent」比「怎么用 Agent」更重要
 - 最大风险是**过度设计** —— 先跑通一条链路，再谈扩展
+
+### 求职向精简版（2026-10-25）
+
+Ember 处于**求职准备期**，明确「重构项目太耗时，只需把 LangChain/LangGraph 的精髓学明白」。
+
+→ `docs/studyPlan/langchain-langgraph-core-steps.md`
+
+- 目标改为「**能讲清 + 能写 demo**」，2 周冲刺
+- 7 个阶段，每阶段带「面试会怎么问 + 答题要点」
+- 附**面试高频 20 问**
+- 核心是阶段 3（手写工具调用循环）和阶段 5（手写 ReAct 图）
+- 明确列出「不学的部分」
+
+**两份文档分工**：
+- `langchain-langgraph-roadmap.md` —— 完整项目路线（4–6 周，含工程化）
+- `langchain-langgraph-core-steps.md` —— **求职向精简版（2 周，优先用这份）**
+
+---
+
+## 十一、项目改名记录
+
+**2026-10-25**：项目目录从 `Desktop\Python学习` 改名为 **`Desktop\PythonStudy`**。
+
+- 旧路径已清空，**不要往旧路径写文件**
+- LangChain 实操目录：`studyLangChain/mini-project/`（uv 管理，Python 3.13）
+- 已装依赖：`langchain 1.4.6` / `langchain-core 1.6.12` / `langchain-openai 1.7.2` / `langgraph`
+
+> **教训**：写文件前先确认项目路径是否存在，用户可能随时改名或移动。
