@@ -18,6 +18,10 @@ ENV/
 credentials.json
 secrets.json
 
+# ---------- AI 规则文件的本地覆盖（个人偏好，不共享）----------
+CODEBUDDY.local.md
+AGENTS.local.md
+
 # ---------- Python 编译产物 ----------
 __pycache__/
 *.py[cod]
