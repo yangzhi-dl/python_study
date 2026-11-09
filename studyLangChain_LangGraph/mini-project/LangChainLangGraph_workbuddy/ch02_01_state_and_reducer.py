@@ -24,13 +24,13 @@ Demo 7  State 定义的六个坑
 
 import operator
 import sys
-import unicodedata
 from typing import Annotated, Callable, NotRequired, TypedDict
 
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
-from langgraph.graph.state import CompiledStateGraph
+
+from graph_flow import draw_flow
 
 
 def show_title(title: str) -> None:
@@ -38,114 +38,6 @@ def show_title(title: str) -> None:
     print("=" * 72)
     print(title)
     print("=" * 72)
-
-
-def display_width(text: str) -> int:
-    """算字符串在终端里占几格。
-
-    中文字符占 2 格，英文占 1 格，直接 len() 会让框线错位。
-    """
-    width = 0
-    for char in text:
-        if unicodedata.east_asian_width(char) in ("W", "F"):
-            width += 2
-        else:
-            width += 1
-    return width
-
-
-def show_graph(
-    app: CompiledStateGraph,
-    node_notes: dict[str, str],
-    edge_notes: dict[tuple[str, str], list[str]],
-    title: str = "流程图",
-) -> None:
-    """在终端里把这张图"画"出来。
-
-    框里是节点名，框右边是这个节点 return 什么；
-    箭头上是这个节点返回的补丁被 reducer 合并进 State 之后变成什么。
-
-    图的结构（谁连谁、几个节点）不是手写的，
-    是从编译后的 app.get_graph().edges 里读出来的真实边，
-    保证画出来的跟代码建出来的完全一致。
-
-    参数：
-        node_notes: 节点名 → 框右边的说明
-        edge_notes: (起点, 终点) → 箭头上要写的几行合并说明
-    """
-    graph = app.get_graph()
-
-    # ---------- ① 从真实图里还原执行顺序 ----------
-    # graph.edges 是 Edge(source=..., target=...) 的列表，
-    # 用邻接表从 __start__ 一路走到底，走出来的就是真实链路。
-    next_node: dict[str, str] = {}
-    for edge in graph.edges:
-        if edge.source in next_node:
-            # 一个节点有多条出边 = 分支图，直线画法会画错，只列边不画图
-            print(f"\n【{title}】")
-            print("  这张图有分支，终端直线画不了，直接列边：")
-            for edge_item in graph.edges:
-                print(f"    {edge_item.source} --> {edge_item.target}")
-            print()
-            return
-        next_node[edge.source] = edge.target
-
-    order: list[str] = []
-    cursor = "__start__"
-    while True:
-        if cursor == "__start__":
-            order.append("START")
-        elif cursor == "__end__":
-            order.append("END")
-            break
-        else:
-            order.append(cursor)
-        cursor = next_node[cursor]
-
-    # ---------- ② 算框宽：中文占 2 格 ----------
-    inner = max(display_width(name) for name in order) + 6
-    if inner % 2 == 0:
-        inner += 1                      # 保证正中间有一列可以画竖线
-    center = inner // 2
-
-    print(f"\n【{title}】")
-    print("  框里 = 节点名    框右边 = 这个节点 return 的字段")
-
-    # ---------- ③ 一个节点一个节点往下画 ----------
-    for index, name in enumerate(order):
-        # 方框
-        pad = inner - display_width(name)
-        left = pad // 2
-        right = pad - left
-        print("   ┌" + "─" * inner + "┐")
-        line = "   │" + " " * left + name + " " * right + "│"
-        note = node_notes.get(name, "")
-        if note:
-            line = line + "  " + note
-        print(line)
-
-        # 最后一个节点：封底，结束
-        if index == len(order) - 1:
-            print("   └" + "─" * inner + "┘")
-            break
-
-        # 非最后一个：封底时在正中间留一个 ┬ 接箭头
-        print("   └" + "─" * center + "┬" + "─" * (inner - center - 1) + "┘")
-
-        # 竖线的左边距：3 格缩进 + 1 个 └ + center 个 ─，正好落在 ┬ 下面
-        spine = "   " + " " * (center + 1)
-        print(spine + "│")
-
-        # 这条边上发生了什么（reducer 怎么合并的）
-        edge_key = (name, order[index + 1])
-        for text in edge_notes.get(edge_key, []):
-            print(spine + "│  " + text)
-        if edge_notes.get(edge_key):
-            print(spine + "│")
-
-        print(spine + "▼")
-
-    print()
 
 
 # ============================================================
@@ -196,7 +88,7 @@ def demo1_minimal_graph() -> None:
     # ④ 编译：编译后才能执行
     app = builder.compile()
 
-    show_graph(
+    draw_flow(
         app,
         node_notes={
             "START": "初始 State = {count: 0, log: []}",
@@ -262,7 +154,7 @@ def demo2_default_overwrite() -> None:
     builder.add_edge("b", END)
     app = builder.compile()
 
-    show_graph(
+    draw_flow(
         app,
         node_notes={
             "START": "初始 State = {log: []}",
@@ -329,7 +221,7 @@ def demo3_operator_add() -> None:
     builder.add_edge("b", END)
     app = builder.compile()
 
-    show_graph(
+    draw_flow(
         app,
         node_notes={
             "START": "初始 State = {log: [], count: 0}",
@@ -400,7 +292,7 @@ def demo4_add_messages() -> None:
     builder.add_edge("reply", END)
     app = builder.compile()
 
-    show_graph(
+    draw_flow(
         app,
         node_notes={
             "START": "初始 messages（3 次 invoke 各不一样，见下面 ①②③）",
@@ -514,7 +406,7 @@ def demo5_custom_reducer() -> None:
     builder.add_edge("c", END)
     app = builder.compile()
 
-    show_graph(
+    draw_flow(
         app,
         node_notes={
             "START": "初始 State = {sources: [], max_severity: 0}",
@@ -614,7 +506,7 @@ def demo6_which_fields_need_reducer() -> None:
         builder.add_edge("replan", END)
 
         app = builder.compile()
-        show_graph(
+        draw_flow(
             app,
             node_notes={
                 "START": "初始 State = {plan: [], retry_count: 0}",
@@ -654,7 +546,7 @@ def demo6_which_fields_need_reducer() -> None:
         builder.add_edge("replan", END)
 
         app = builder.compile()
-        show_graph(
+        draw_flow(
             app,
             node_notes={
                 "START": "初始 State = {plan: [], retry_count: 0}",
@@ -747,7 +639,7 @@ def demo7_state_pitfalls() -> None:
     builder.add_edge("n", END)
     app = builder.compile()
 
-    show_graph(
+    draw_flow(
         app,
         node_notes={
             "START": "初始 State = {'required_field': 'x'}（没传 optional_field）",
@@ -802,10 +694,10 @@ DEMOS: list[tuple[str, str, Callable[[], None]]] = [
     # ("1", "最小可用图", demo1_minimal_graph),
     # ("2", "默认行为是覆盖", demo2_default_overwrite),
     # ("3", "operator.add 累加", demo3_operator_add),
-    # ("4", "add_messages", demo4_add_messages),
+    ("4", "add_messages", demo4_add_messages),
     # ("5", "自定义 reducer", demo5_custom_reducer),
     # ("6", "哪些字段该加 reducer", demo6_which_fields_need_reducer),
-    ("7", "State 的六个坑", demo7_state_pitfalls),
+    # ("7", "State 的六个坑", demo7_state_pitfalls),
 ]
 
 
