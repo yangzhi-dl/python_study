@@ -226,90 +226,272 @@ def _render_linear(
 
 
 # ============================================================
-# 四、画法 B：节点框 + 出边列表（分支 / 循环 / 合并）
+# 四、画法 B：分层布线（分支 / 循环 / 合并）
+#
+# 原理：先把节点按执行层级排成一行行，再让每条边走"下 → 横 → 下"。
+# 关键技巧：画布不直接写字符，而是记录每格"往哪几个方向有线段"，
+# 最后统一翻译成 ┌┐└┘├┤┬┴┼ —— 拐角、十字、丁字永远不会画错。
+# 条件边用 ┆┄ 虚线，普通边用 │─ 实线。
 # ============================================================
 
-def _render_edges(
+_SOLID = {
+    frozenset("D"): "│", frozenset("U"): "│", frozenset("DU"): "│",
+    frozenset("L"): "─", frozenset("R"): "─", frozenset("LR"): "─",
+    frozenset("DR"): "┌", frozenset("DL"): "┐",
+    frozenset("UR"): "└", frozenset("UL"): "┘",
+    frozenset("DUR"): "├", frozenset("DUL"): "┤",
+    frozenset("DLR"): "┬", frozenset("ULR"): "┴",
+    frozenset("DULR"): "┼",
+}
+_DASHED = {
+    frozenset("U"): "┆", frozenset("D"): "┆", frozenset("DU"): "┆",
+    frozenset("L"): "┄", frozenset("R"): "┄", frozenset("LR"): "┄",
+}
+
+
+class _Grid:
+    """方向掩码画布。"""
+
+    def __init__(self) -> None:
+        self.dirs: dict[tuple[int, int], set[str]] = {}
+        self.text: dict[tuple[int, int], str] = {}
+        self.dashed: set[tuple[int, int]] = set()
+
+    def add(self, row: int, col: int, direction: str, dashed: bool = False) -> None:
+        self.dirs.setdefault((row, col), set()).add(direction)
+        if dashed:
+            self.dashed.add((row, col))
+
+    def hline(self, row: int, col1: int, col2: int, dashed: bool = False) -> None:
+        lo, hi = min(col1, col2), max(col1, col2)
+        for c in range(lo, hi + 1):
+            if c < hi:
+                self.add(row, c, "R", dashed)
+            if c > lo:
+                self.add(row, c, "L", dashed)
+
+    def vline(self, col: int, row1: int, row2: int, dashed: bool = False) -> None:
+        lo, hi = min(row1, row2), max(row1, row2)
+        for r in range(lo, hi + 1):
+            if r < hi:
+                self.add(r, col, "D", dashed)
+            if r > lo:
+                self.add(r, col, "U", dashed)
+
+    def put(self, row: int, col: int, text: str) -> None:
+        x = col
+        for char in text:
+            self.text[(row, x)] = char
+            if display_width(char) == 2:
+                self.text[(row, x + 1)] = ""
+            x += 2 if display_width(char) == 2 else 1
+
+    def render(self) -> list[str]:
+        points = list(self.dirs) + list(self.text)
+        if not points:
+            return []
+        max_row = max(r for r, _ in points)
+        max_col = max(c for _, c in points)
+        lines: list[str] = []
+        for r in range(max_row + 1):
+            buf: list[str] = []
+            for c in range(max_col + 1):
+                if (r, c) in self.text:
+                    buf.append(self.text[(r, c)])
+                elif (r, c) in self.dirs:
+                    mask = frozenset(self.dirs[(r, c)])
+                    table = _DASHED if (r, c) in self.dashed else _SOLID
+                    buf.append(table.get(mask) or _SOLID.get(mask) or " ")
+                else:
+                    buf.append(" ")
+            lines.append("".join(buf).rstrip())
+        while lines and not lines[-1]:
+            lines.pop()
+        return lines
+
+
+def _ranks(nodes: list[str], edges: list[dict], back: set[tuple[str, str]]) -> dict[str, int]:
+    """按最长路径分层：同一层 = 可以并行的节点。"""
+    rank = {node: 0 for node in nodes}
+    forward = [
+        e for e in edges
+        if e["dst"] in rank and (e["src"], e["dst"]) not in back
+    ]
+    for _ in range(len(nodes) + 2):
+        changed = False
+        for edge in forward:
+            if edge["dst"] == "START":
+                continue
+            want = rank[edge["src"]] + 1
+            if rank[edge["dst"]] < want:
+                rank[edge["dst"]] = want
+                changed = True
+        if not changed:
+            break
+    return rank
+
+
+def _render_layered(
     nodes: list[str],
     edges: list[dict],
     back: set[tuple[str, str]],
     node_notes: dict[str, str],
     title: str,
 ) -> list[str]:
-    outgoing: dict[str, list[dict]] = {}
-    incoming: dict[str, int] = {}
-    for edge in edges:
-        outgoing.setdefault(edge["src"], []).append(edge)
-        incoming[edge["dst"]] = incoming.get(edge["dst"], 0) + 1
+    index_of = {node: i for i, node in enumerate(nodes)}
+    forward = [e for e in edges if (e["src"], e["dst"]) not in back]
+    backs = [e for e in edges if (e["src"], e["dst"]) in back]
+    rank = _ranks(nodes, edges, back)
 
-    inner = max(display_width(node) for node in nodes) + 6
-    if inner % 2 == 0:
-        inner += 1
-
-    lines = [f"\n【{title}】"]
-    lines.append("  每个方框是一个节点，框右边列的是它的出边")
-    lines.append("  ──→ 普通边    ──条件──→ 条件边    ↺ 回边（循环）")
-
+    layers: dict[int, list[str]] = {}
     for node in nodes:
+        layers.setdefault(rank[node], []).append(node)
+    rank_keys = sorted(layers)
+    for key in rank_keys:
+        layers[key].sort(key=lambda n: index_of[n])
+
+    # ---------- 横向位置：父节点居中 ----------
+    box_w = max(display_width(n) for n in nodes) + 8
+    if box_w % 2 == 0:
+        box_w += 1
+    inner = box_w - 2
+    gap_x = 12
+    left_pad = 4 + len(backs) * 2
+
+    x: dict[str, float] = {}
+    for key in rank_keys:
+        ordered = sorted(layers[key], key=lambda n: index_of[n])
+        for i, node in enumerate(ordered):
+            parents = [
+                x[e["src"]] for e in forward
+                if e["dst"] == node and rank[e["src"]] < key and e["src"] in x
+            ]
+            x[node] = sum(parents) / len(parents) if parents else float(i * (box_w + gap_x))
+
+        ordered = sorted(ordered, key=lambda n: (x[n], index_of[n]))
+        for i in range(1, len(ordered)):
+            prev, cur = ordered[i - 1], ordered[i]
+            min_x = x[prev] + box_w + gap_x
+            if x[cur] < min_x:
+                x[cur] = min_x
+        layers[key] = ordered
+
+    shift = min(x.values()) - left_pad
+    x = {n: int(v - shift) for n, v in x.items()}
+
+    # ---------- 竖向位置 ----------
+    lanes: dict[int, list[dict]] = {}
+    for edge in forward:
+        lanes.setdefault(rank[edge["src"]], []).append(edge)
+
+    def gap_height(key: int) -> int:
+        group = lanes.get(key, [])
+        if not group:
+            return 0
+        crossing = [e for e in group if x[e["src"]] != x[e["dst"]]]
+        return 1 + len(crossing) + 1
+
+    y: dict[str, int] = {}
+    gap_top: dict[int, int] = {}
+    cursor = 0
+    for key in rank_keys:
+        for node in layers[key]:
+            y[node] = cursor
+        cursor += 3
+        gap_top[key] = cursor
+        cursor += gap_height(key)
+
+    # ---------- 通道行分配 ----------
+    lane_row: dict[int, int | None] = {}
+    for key in rank_keys:
+        group = lanes.get(key, [])
+        crossing = [e for e in group if x[e["src"]] != x[e["dst"]]]
+        straight = [e for e in group if x[e["src"]] == x[e["dst"]]]
+        crossing.sort(key=lambda e: abs(x[e["src"]] - x[e["dst"]]))
+        for i, edge in enumerate(crossing):
+            lane_row[id(edge)] = gap_top[key] + 1 + i
+        for edge in straight:
+            lane_row[id(edge)] = None
+
+    # ---------- 画 ----------
+    grid = _Grid()
+    for node in nodes:
+        bx, by = x[node], y[node]
         pad = inner - display_width(node)
         left = pad // 2
         right = pad - left
+        grid.put(by, bx, "┌" + "─" * inner + "┐")
+        grid.put(by + 1, bx, "│" + " " * left + node + " " * right + "│")
+        grid.put(by + 2, bx, "└" + "─" * inner + "┘")
 
-        outs = outgoing.get(node, [])
-        note = node_notes.get(node, "")
+    labels: list[tuple[int, int, str]] = []
+    for key in rank_keys:
+        for edge in lanes.get(key, []):
+            sx = x[edge["src"]] + box_w // 2
+            tx = x[edge["dst"]] + box_w // 2
+            sy = y[edge["src"]] + 3
+            ty = y[edge["dst"]]
+            lane = lane_row[id(edge)]
+            dashed = edge["cond"]
+            join_row = ty - 1
 
-        # 方框上边框
-        lines.append("   ┌" + "─" * inner + "┐")
+            if lane is None:
+                grid.vline(sx, sy, join_row, dashed)
+            else:
+                grid.vline(sx, sy, lane, dashed)
+                grid.hline(lane, sx, tx, dashed)
+                grid.vline(tx, lane, join_row, dashed)
 
-        # 方框中间行：节点名 + 右边挂第一条出边（或备注）
-        mid = "   │" + " " * left + node + " " * right + "│"
-        if outs:
-            mid += "  " + _edge_text(outs[0], back)
-        elif note:
-            mid += "  " + note
-        lines.append(mid.rstrip())
+            grid.put(join_row, tx, "▼")
 
-        # 其余出边：每一行都带左边框和右边框，中间留空
-        blank_mid = "   │" + " " * inner + "│"
-        for edge in outs[1:]:
-            lines.append(blank_mid + "  " + _edge_text(edge, back))
+            tag = f"[{edge['label']}]" if edge["label"] is not None else ("[条件]" if edge["cond"] else None)
+            if tag and abs(sx - tx) >= display_width(tag) + 6:
+                labels.append((lane, min(sx, tx) + 2, tag))
 
-        # 方框右边那条竖线不能断：用"空白行 + 竖线"补齐更直观
-        if not outs and node != "END":
-            lines.append(blank_mid)
-            term = "  终点节点" if incoming.get(node, 0) > 0 else "  孤立节点（没人连进来）"
-            lines.append("   " + " " * (inner + 5) + term)
+    for row, col, tag in labels:
+        free = True
+        for c in range(col, col + display_width(tag)):
+            if (row, c) in grid.text:
+                free = False
+                break
+            directions = grid.dirs.get((row, c))
+            if directions and (set(directions) - {"L", "R"}):
+                free = False
+                break
+        if free:
+            grid.put(row, col, tag)
 
-        # 备注：出边占用了中间行，备注放到最后一行
-        if outs and note:
-            lines.append(blank_mid + "  # " + note)
+    # ---------- 回边（循环）：走左侧 ----------
+    for i, edge in enumerate(backs):
+        lane_col = 1 + i * 2
+        if edge["src"] == edge["dst"]:
+            top = y[edge["src"]] - 1
+            grid.hline(y[edge["src"]] + 1, x[edge["src"]] - 2, lane_col, True)
+            grid.vline(lane_col, top, y[edge["src"]] + 1, True)
+            grid.hline(top, lane_col, x[edge["src"]] + box_w // 2, True)
+            grid.put(top, x[edge["src"]] + box_w // 2, "▼")
+        else:
+            src_row = y[edge["src"]] + 1
+            dst_row = y[edge["dst"]] + 1
+            grid.hline(src_row, x[edge["src"]] - 2, lane_col, True)
+            grid.vline(lane_col, src_row, dst_row, True)
+            grid.hline(dst_row, lane_col, x[edge["dst"]] - 2, True)
+            grid.put(dst_row, x[edge["dst"]] - 2, "▶")
 
-        lines.append("   └" + "─" * inner + "┘")
+    lines = [f"\n【{title}】"]
+    lines.extend("   " + row for row in grid.render())
+    lines.append("")
+    lines.append("  ── 实线 = 普通边（写死，必走）")
+    lines.append("  ┄┄ 虚线 = 条件边（由 route 函数决定走哪条）")
+    if backs:
+        lines.append("  左侧虚线 = 循环回边")
 
-    if back:
+    notes = [(n, node_notes[n]) for n in nodes if n in node_notes]
+    if notes:
         lines.append("")
-        lines.append("  循环（回边）：")
-        for src, dst in sorted(back):
-            lines.append(f"    {src} ──→ {dst}    执行完回到前面的节点")
-
+        for node, note in notes:
+            lines.append(f"    {node}：{note}")
     return lines
-
-
-def _edge_text(edge: dict, back: set[tuple[str, str]]) -> str:
-    """一条边画成一行文字。"""
-    src, dst = edge["src"], edge["dst"]
-
-    if edge["cond"]:
-        text = "──条件──→ " + dst
-        if edge["label"] is not None:
-            text = f"──条件[{edge['label']}]──→ {dst}"
-    else:
-        text = "──→ " + dst
-
-    if (src, dst) in back:
-        text += "   ↺ 回边"
-
-    return text
 
 
 # ============================================================
@@ -344,7 +526,7 @@ def draw_flow(
         order = _linear_order(nodes, edges)
         lines = _render_linear(order, edges, node_notes, edge_notes, title)
     else:
-        lines = _render_edges(nodes, edges, back, node_notes, title)
+        lines = _render_layered(nodes, edges, back, node_notes, title)
 
     for line in lines:
         print(line)
